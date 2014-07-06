@@ -7,10 +7,12 @@ A rather buggy optimising brainf--k compiler. A successor to
 Compiling
 ---------
 
-You should be able to compile Tarpit itself just by running make. If you want
-to compile the programs in the examples directory also, do "make examples".
+The distribution includes a shell script which invokes the labrea.scm file under
+the Chicken Scheme interpreter with the appropriate arguments.
 
-Both of the example programs were taken from the [Wikipedia article](http://en.wikipedia.org/w/index.php?title=Brainfuck&oldid=470402810).
+Do "make" to compile the programs in the examples directory. Both of the example
+programs were taken from the [Wikipedia
+article](http://en.wikipedia.org/w/index.php?title=Brainfuck&oldid=470402810).
 
 License
 -------

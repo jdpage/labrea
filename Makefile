@@ -1,16 +1,11 @@
 .PHONY: all examples clean
 
-all: labrea
+all: helloworld rot13
 
-labrea: labrea.scm
-	csc -o $@ $^
-
-examples: helloworld rot13
-
-%: examples/%.bf labrea
+%: examples/%.bf labrea.scm
 	./labrea -fnasm -o $<.asm $<
 	yasm -fmacho64 $<.asm -o $<.o
 	ld $<.o -o $@
 
 clean:
-	-rm labrea examples/*.o examples/*.asm helloworld rot13
+	-rm examples/*.o examples/*.asm helloworld rot13

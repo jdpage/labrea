@@ -1,4 +1,4 @@
-#!/usr/local/bin/csi -s
+#!/usr/local/bin/csi -ss
 
 ;; labrea - an optimising compiler for brainf--k.
 ;; https://github.com/jdpage/labrea
@@ -587,7 +587,11 @@
          [_
            #f]))
 
-;; compilation
+;; command-line driver
+
+(define (cli-error value)
+  (display (format "labrea: error: ~a" value))
+  (newline))
 
 (define (select-code-generator)
   (lambda (ir)
@@ -634,7 +638,7 @@
              ["gas"
               (set! *output-code-proc* output-code-gas)]
              [_
-               (error (format "unrecognized format ~a" arg))])
+               (cli-error (format "unrecognized format ~a" arg))])
       seeds)))
 
 (define option-target
@@ -653,7 +657,7 @@
                   (lambda (ir)
                     (generate-code-sysv-amd64 get-syscall-sysv ir))))]
              [_
-               (error (format "unsupported target ~a" arg))])
+               (cli-error (format "unsupported target ~a" arg))])
       seeds)))
 
 (define option-output
@@ -683,22 +687,22 @@
       ; pp)))
       output-code)))
 
-(define ops
-  (reverse
-    (args-fold
-      (command-line-arguments)
-      (list
-        option-help
-        option-format
-        option-target
-        option-output)
-      (lambda (opt name arg seeds)
-        (error (format "unrecognised option ~a" opt)))
-      cons '())))
-
-(if (zero? (length ops))
-  (error "no input files specified"))
-(for-each
-  (lambda (x)
-    (with-input-from-file x compile))
-  ops)
+(define (main args)
+  (let ([ops
+          (reverse
+            (args-fold
+              args
+              (list
+                option-help
+                option-format
+                option-target
+                option-output)
+              (lambda (opt name arg seeds)
+                (cli-error (format "unrecognised option ~a" opt)))
+              cons '()))])
+    (if (zero? (length ops))
+      (cli-error "no input files specified"))
+    (for-each
+      (lambda (x)
+        (with-input-from-file x compile))
+      ops)))
