@@ -13,6 +13,7 @@
 (require-extension srfi-1)
 (require-extension srfi-13)
 (require-extension srfi-28)
+(require-extension srfi-37)
 (require-extension matchable)
 
 ;; stage 0: read in
@@ -465,8 +466,6 @@
     (block 0 30000)))
 
 
-(define (generate-code ir)
-  (generate-code-sysv-amd64 get-syscall-xnu64 ir))
 
 ;; stage ω+1: assembly output
 ;;
@@ -588,9 +587,86 @@
          [_
            #f]))
 
-(define output-code output-code-nasm)
-
 ;; compilation
+
+(define (select-code-generator)
+  (lambda (ir)
+    (generate-code-sysv-amd64 get-syscall-xnu64 ir)))
+
+(define *output-code-proc* output-code-nasm)
+
+(define (output-code ir)
+  (*output-code-proc* ir))
+
+(define option-help
+  (option
+    `(#\h "help") #f #f
+    (lambda _
+      (display "usage: labrea [-t platform] [-f format] [-o output] input")
+      (newline)
+      (display "  -h  --help    show this text") (newline)
+      (newline)
+      (display "  -f  --format  select output format:") (newline)
+      (display "                  nasm (NASM/YASM syntax, default)") (newline)
+      (display "                  yasm (same as nasm)") (newline)
+      (display "                  intel (same as nasm)") (newline)
+      (display "                  gas  (GNU Assembler syntax)") (newline)
+      (newline)
+      (display "  -t  --target  select target platform:") (newline)
+      (display "                  xnu-amd64  (Mac OS X)") (newline)
+      (display "                  sysv-ia32  (SysV IA-32)") (newline)
+      (display "                  sysv-amd64 (SysV AMD64)") (newline)
+      (display "                  sysv-arm6  (SysV ARMv6)") (newline)
+      (newline)
+      (display "  -o  --output  output to file") (newline)
+      (newline)
+      (exit))))
+
+(define option-format
+  (option
+    `(#\f "format") #t #f
+    (lambda (opt name arg seeds)
+      (match arg
+             [(or "nasm"
+                  "yasm"
+                  "intel")
+              (set! *output-code-proc* output-code-nasm)]
+             ["gas"
+              (set! *output-code-proc* output-code-gas)]
+             [_
+               (error (format "unrecognized format ~a" arg))])
+      seeds)))
+
+(define option-target
+  (option
+    `(#\t "target") #t #f
+    (lambda (opt name arg seeds)
+      (match arg
+             ["xnu-amd64"
+              (set! select-code-generator
+                (lambda ()
+                  (lambda (ir)
+                    (generate-code-sysv-amd64 get-syscall-xnu64 ir))))]
+             ["sysv-amd64"
+              (set! select-code-generator
+                (lambda ()
+                  (lambda (ir)
+                    (generate-code-sysv-amd64 get-syscall-sysv ir))))]
+             [_
+               (error (format "unsupported target ~a" arg))])
+      seeds)))
+
+(define option-output
+  (option
+    `(#\o "output") #t #f
+    (lambda (opt name arg seeds)
+      (set! output-code
+        (lambda (ir)
+          (with-output-to-file
+            arg
+            (lambda ()
+              (*output-code-proc* ir)))))
+      seeds)))
 
 (define (compile)
   (run-optimisation-sequence
@@ -603,8 +679,26 @@
       condense-memory-offsets           ; stage 3
       reduce-cell-pointer-changes       ; stage 4
       distribute-cell-changes-right     ;   stage 4b
-      generate-code                     ; stage ω
+      (select-code-generator)           ; stage ω
       ; pp)))
       output-code)))
 
-(compile)
+(define ops
+  (reverse
+    (args-fold
+      (command-line-arguments)
+      (list
+        option-help
+        option-format
+        option-target
+        option-output)
+      (lambda (opt name arg seeds)
+        (error (format "unrecognised option ~a" opt)))
+      cons '())))
+
+(if (zero? (length ops))
+  (error "no input files specified"))
+(for-each
+  (lambda (x)
+    (with-input-from-file x compile))
+  ops)
