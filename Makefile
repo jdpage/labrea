@@ -2,10 +2,14 @@
 
 all: helloworld rot13
 
-%: examples/%.bf labrea.scm
-	./labrea -fnasm -o $<.asm $<
-	yasm -fmacho64 $<.asm -o $<.o
-	ld $<.o -o $@
+%: examples/%.o
+	ld -o $@ $<
+
+examples/%.o: examples/%.S
+	as -o $@ $<
+
+examples/%.S: examples/%.bf labrea.scm
+	./labrea -fgas -o $@ $<
 
 clean:
-	-rm examples/*.o examples/*.asm helloworld rot13
+	-rm examples/*.o examples/*.S helloworld rot13

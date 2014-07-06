@@ -591,11 +591,24 @@
 
 (define (cli-error value)
   (display (format "labrea: error: ~a" value))
-  (newline))
+  (newline)
+  (exit 1))
 
 (define (select-code-generator)
-  (lambda (ir)
-    (generate-code-sysv-amd64 get-syscall-xnu64 ir)))
+  (let ([triple (list
+                  (software-version)
+                  (software-type)
+                  (build-platform)
+                  (machine-type))])
+    (match triple
+           [('macosx 'unix _ 'x86-64)
+            (lambda (ir)
+              (generate-code-sysv-amd64 get-syscall-xnu64 ir))]
+           [(_ 'unix _ 'x86-64)
+            (lambda (ir)
+              (generate-code-sysv-amd64 get-syscall-sysv ir))]
+           [(v t p m)
+            (cli-error (format "unsupported platform ~a-~a-~a-~a" v t p m))])))
 
 (define *output-code-proc* output-code-nasm)
 
@@ -611,16 +624,18 @@
       (display "  -h  --help    show this text") (newline)
       (newline)
       (display "  -f  --format  select output format:") (newline)
-      (display "                  nasm (NASM/YASM syntax, default)") (newline)
-      (display "                  yasm (same as nasm)") (newline)
+      (display "                  nasm  (NASM/YASM syntax, default)") (newline)
+      (display "                  yasm  (same as nasm)") (newline)
       (display "                  intel (same as nasm)") (newline)
-      (display "                  gas  (GNU Assembler syntax)") (newline)
+      (display "                  gas   (GNU Assembler syntax)") (newline)
+      (display "                  none") (newline)
       (newline)
       (display "  -t  --target  select target platform:") (newline)
       (display "                  xnu-amd64  (Mac OS X)") (newline)
       (display "                  sysv-ia32  (SysV IA-32)") (newline)
       (display "                  sysv-amd64 (SysV AMD64)") (newline)
       (display "                  sysv-arm6  (SysV ARMv6)") (newline)
+      (display "                  ir         (Uncompiled IR)") (newline)
       (newline)
       (display "  -o  --output  output to file") (newline)
       (newline)
@@ -637,6 +652,8 @@
               (set! *output-code-proc* output-code-nasm)]
              ["gas"
               (set! *output-code-proc* output-code-gas)]
+             ["none"
+              (set! *output-code-proc* pp)]
              [_
                (cli-error (format "unrecognized format ~a" arg))])
       seeds)))
@@ -647,15 +664,18 @@
     (lambda (opt name arg seeds)
       (match arg
              ["xnu-amd64"
-              (set! select-code-generator
-                (lambda ()
-                  (lambda (ir)
-                    (generate-code-sysv-amd64 get-syscall-xnu64 ir))))]
+              (set! (select-code-generator)
+                (lambda (ir)
+                  (generate-code-sysv-amd64 get-syscall-xnu64 ir)))]
              ["sysv-amd64"
-              (set! select-code-generator
-                (lambda ()
-                  (lambda (ir)
-                    (generate-code-sysv-amd64 get-syscall-sysv ir))))]
+              (set! (select-code-generator)
+                (lambda (ir)
+                  (generate-code-sysv-amd64 get-syscall-sysv ir)))]
+             ["ir"
+              (set! (select-code-generator)
+                (lambda (ir)
+                  ir))
+              (set! *output-code-proc* pp)]
              [_
                (cli-error (format "unsupported target ~a" arg))])
       seeds)))
