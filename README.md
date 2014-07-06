@@ -1,7 +1,8 @@
 labrea
 ======
 
-A rather buggy optimising brainf--k compiler.
+A rather buggy optimising brainf--k compiler. A successor to
+[tarpit](https://github.com/jdpage/tarpit).
 
 Compiling
 ---------
