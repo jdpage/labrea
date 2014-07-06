@@ -1,6 +1,7 @@
 *.swp
 *.o
 *.asm
+*.S
 helloworld
 rot13
 labrea

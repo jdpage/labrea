@@ -407,7 +407,7 @@
   `((global "start")
     (section "text")
     (symbol "start")
-    (mov rax (qword "arena"))
+    (mov (register rax) (symbol qword "arena"))
     ,@(let ([counter 0])
         (let loop ([remaining ir])
           (match remaining
@@ -416,48 +416,49 @@
                    (set! counter (+ counter 1))
                    (let ([lbl (number->string counter)])
                      `(,@(generate-loop-sysv-amd64
-                           lbl `(deref byte rax) (loop body))
+                           lbl `(deref byte (register rax)) (loop body))
                         ,@(loop rem)))]
                  [(`(loop-until-offset-cell-zero ,(body ...) ,offset)
                     . rem)
                   (set! counter (+ counter 1))
                   (let ([lbl (number->string counter)])
                     `(,@(generate-loop-sysv-amd64
-                          lbl `(deref byte (+ rax ,offset)) (loop body))
+                          lbl `(deref byte (+ (register rax) ,offset))
+                          (loop body))
                        ,@(loop rem)))]
                  [(`(add-to-offset-cell ,offset ,value)
                     . rem)
-                  `((add (deref byte (+ rax ,offset)) ,value)
+                  `((add (deref byte (+ (register rax) ,offset)) ,value)
                     ,@(loop rem))]
                  [(`(look-cell-offset ,delta)
                     . rem)
-                  `((add rax ,delta)
+                  `((add (register rax) ,delta)
                     ,@(loop rem))]
                  [(`(write-char-from-offset-cell ,offset)
                     . rem)
-                  `((mov rsi rax)
-                    (add rsi ,offset)
-                    (mov rax ,(get-syscall 'sys-write))
-                    (mov rdi 1) ; stdout
-                    (mov rdx 1)
+                  `((mov (register rsi) (register rax))
+                    (add (register rsi) ,offset)
+                    (mov (register rax) ,(get-syscall 'sys-write))
+                    (mov (register rdi) 1) ; stdout
+                    (mov (register rdx) 1)
                     (syscall)
-                    (mov rax rsi)
-                    (sub rax ,offset)
+                    (mov (register rax) (register rsi))
+                    (sub (register rax) ,offset)
                     ,@(loop rem))]
                  [(`(read-char-into-offset-cell ,offset)
                     . rem)
-                  `((mov rsi rax)
-                    (add rsi ,offset)
-                    (mov rax ,(get-syscall 'sys-read))
-                    (mov rdi 0) ; stdin
-                    (mov rdx 1)
+                  `((mov (register rsi) (register rax))
+                    (add (register rsi) ,offset)
+                    (mov (register rax) ,(get-syscall 'sys-read))
+                    (mov (register rdi) 0) ; stdin
+                    (mov (register rdx) 1)
                     (syscall)
-                    (mov rax rsi)
-                    (sub rax ,offset)
+                    (mov (register rax) (register rsi))
+                    (sub (register rax) ,offset)
                     ,@(loop rem))]
                  [() '()])))
-    (mov rax ,(get-syscall 'sys-exit))
-    (mov rdi 0)
+    (mov (register rax) ,(get-syscall 'sys-exit))
+    (mov (register rdi) 0)
     (syscall)
     (section "data")
     (label "arena")
@@ -488,7 +489,7 @@
                [`(block ,byte ,size)
                  (format "  times ~a db ~a" size byte)]
                [`(,op ,addy)
-                 (format "  ~a ~a" op addy)]
+                 (format "  ~a ~a" op (output-loc-nasm addy))]
                [`(,op ,dest ,src)
                  (format "  ~a ~a, ~a" op
                          (output-loc-nasm dest)
@@ -501,6 +502,8 @@
 
 (define (output-loc-nasm loc)
   (match loc
+         [`(register ,reg)
+           (format "~a" reg)]
          [`(deref ,size ,e)
            (format "~a [~a]" size (output-loc-nasm e))]
          [`(+ ,l ,r)
@@ -515,8 +518,75 @@
                    'dword
                    'qword)) value)
           (format "~a ~a" size value)]
+         [`(symbol ,size ,sym)
+           (format "~a ~a" size sym)]
          [x
            (format "~a" x)]))
+
+(define (output-code-gas asm)
+  (for-each
+    (lambda (line)
+      (display
+        (match line
+               [`(global ,sym)
+                 (format ".globl ~a" sym)]
+               [`(section ,sec)
+                 (format ".~a" sec)]
+               [`(label ,lbl)
+                 (format "~a:" lbl)]
+               [`(symbol ,sym)
+                 (format "~a:" sym)]
+               [`(block ,byte ,size)
+                 (format ".fill ~a, 1, ~a" size byte)]
+               [`(,op ,addy)
+                 (format "  ~a ~a" op (output-loc-gas addy))]
+               [`(,op ,dest ,src)
+                 (format "  ~a~a ~a, ~a" op
+                         (or (gas-size-suffix src)
+                             (gas-size-suffix dest))
+                         (output-loc-gas src)
+                         (output-loc-gas dest))]
+               [`(,op)
+                 (format "  ~a" op)]))
+      (newline))
+    asm))
+
+(define (output-loc-gas loc)
+  (match loc
+         [`(register ,reg)
+           (format "%~a" reg)]
+         [`(deref ,size (+ ,l ,r))
+           (format "~a(~a)" r
+                   (output-loc-gas l))]
+         [`(deref ,size ,e)
+           (format "(~a)" (output-loc-gas e))]
+         [(? number?)
+          (format "$~a" loc)]
+         [`(,size ,value)
+           (output-loc-gas value)]
+         [`(symbol ,size ,sym)
+          (format "~a@GOTPCREL(%rip)" sym)]
+         [x
+           (format "~a" x)]))
+
+(define (gas-size-suffix loc)
+  (match loc
+         [`(register ,reg)
+           (match (string->list (symbol->string reg))
+                  [(#\r . _)
+                   #\q]
+                  [(#\e . _)
+                   #\d]
+                  [(_ #\x)
+                   #\w]
+                  [_
+                    #\b])]
+         [(or ('deref size . _)
+              ('symbol size . _)
+              (size _))
+           (car (string->list (symbol->string size)))]
+         [_
+           #f]))
 
 (define output-code output-code-nasm)
 
