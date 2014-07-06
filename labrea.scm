@@ -3,7 +3,7 @@
 ;; labrea - an optimising compiler for brainf--k.
 ;; https://github.com/jdpage/labrea
 ;;
-;; This is a rewrite of the tarpit compiler (https://github.com/jdpage/labrea),
+;; This is a rewrite of the tarpit compiler (https://github.com/jdpage/tarpit),
 ;; which only does some trivial optimisations and only compiles for IA-32 ELF.
 ;;
 ;; This version supports both IA-32 and AMD64, and outputs assembly instead of
